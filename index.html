@@ -1,0 +1,926 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PICKSET | 핀셋형 교육 재정 최적화 플랫폼</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: [
+                "Pretendard",
+                "Inter",
+                "ui-sans-serif",
+                "system-ui",
+                "-apple-system",
+                "BlinkMacSystemFont",
+                "Segoe UI",
+                "sans-serif",
+              ],
+            },
+          },
+        },
+      };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        min-height: 100vh;
+      }
+
+      #searchShell {
+        min-height: calc(100vh - 8px);
+        transition:
+          min-height 700ms ease,
+          padding 700ms ease;
+      }
+
+      #searchShell.compact {
+        min-height: 0;
+      }
+
+      #heroCopy {
+        transition:
+          opacity 450ms ease,
+          transform 450ms ease,
+          max-height 450ms ease,
+          margin 450ms ease;
+        max-height: 240px;
+      }
+
+      #searchShell.compact #heroCopy {
+        opacity: 0;
+        transform: translateY(-14px);
+        max-height: 0;
+        margin: 0;
+        overflow: hidden;
+        pointer-events: none;
+      }
+
+      .pickset-glow {
+        background:
+          radial-gradient(circle at 50% 25%, rgba(251, 191, 36, 0.18), transparent 28rem),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.98));
+      }
+
+      .suggestion-active {
+        background: rgb(254 243 199);
+      }
+
+      .chart-wrap {
+        height: clamp(320px, 30vw, 520px);
+      }
+
+      @keyframes riseIn {
+        from {
+          opacity: 0;
+          transform: translateY(22px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .rise-in {
+        animation: riseIn 650ms ease both;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-800 antialiased">
+    <div class="fixed inset-x-0 top-0 z-50 h-1 bg-amber-400"></div>
+
+    <main class="pickset-glow min-h-screen">
+      <section aria-label="학교 검색" class="px-4">
+        <div id="searchShell" class="mx-auto flex max-w-6xl flex-col justify-center py-10 sm:px-4">
+          <div id="heroCopy" class="mx-auto max-w-3xl text-center">
+            <div class="mb-6 inline-flex items-center gap-3 rounded-full border border-amber-200 bg-white px-5 py-3 shadow-sm">
+              <span class="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-400 text-lg font-black text-slate-900">P</span>
+              <span class="text-sm font-black tracking-[0.18em] text-slate-900">PICKSET</span>
+            </div>
+            <h1 class="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">
+              핀셋형 교육 재정 최적화 플랫폼
+            </h1>
+            <p class="mx-auto mt-4 max-w-2xl text-base leading-7 text-gray-500 sm:text-lg">
+              학교를 선택하면 같은 설립유형, 지역, 규모 기반의 유사 그룹과 4대 교육 재정 지표를 즉시 비교합니다.
+            </p>
+          </div>
+
+          <div class="mx-auto mt-8 w-full max-w-3xl">
+            <div class="relative">
+              <label for="schoolSearch" class="sr-only">학교명 검색</label>
+              <div class="flex items-center rounded-3xl border border-gray-100 bg-white p-2 shadow-sm transition focus-within:border-amber-300 focus-within:ring-4 focus-within:ring-amber-100">
+                <span aria-hidden="true" class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-xl font-black text-amber-500">⌕</span>
+                <input
+                  id="schoolSearch"
+                  data-testid="school-search"
+                  type="text"
+                  class="min-w-0 flex-1 bg-transparent px-4 py-4 text-base font-semibold text-slate-800 outline-none placeholder:text-gray-400 sm:text-lg"
+                  placeholder="학교명을 입력하세요"
+                  autocomplete="off"
+                  disabled
+                />
+                <button
+                  id="clearButton"
+                  type="button"
+                  class="hidden h-11 w-11 shrink-0 rounded-2xl text-xl font-bold text-gray-400 transition hover:bg-gray-50 hover:text-slate-700"
+                  aria-label="검색어 지우기"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div
+                id="suggestions"
+                data-testid="suggestions"
+                class="absolute left-0 right-0 top-[calc(100%+10px)] z-40 hidden overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl"
+                role="listbox"
+                aria-label="학교 자동완성 목록"
+              ></div>
+            </div>
+            <p id="loadState" class="mt-4 text-center text-sm font-semibold text-gray-500">
+              학교 재정 데이터를 불러오는 중입니다.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="dashboard"
+        data-testid="dashboard"
+        class="hidden translate-y-8 px-4 pb-14 opacity-0 transition duration-700 sm:px-6 2xl:px-10"
+        aria-live="polite"
+      >
+        <div class="mx-auto max-w-[1680px] space-y-6">
+          <div class="grid gap-6 lg:grid-cols-[1.05fr_1.95fr] 2xl:grid-cols-[420px_minmax(0,1fr)]">
+            <article class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <p class="text-sm font-black text-amber-500">SELECTED SCHOOL</p>
+                  <h2 id="selectedSchoolName" class="mt-2 text-3xl font-black tracking-tight text-slate-900">-</h2>
+                </div>
+                <span id="selectedGroupBadge" class="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700">-</span>
+              </div>
+              <div class="mt-6 grid grid-cols-2 gap-3 text-sm">
+                <div class="rounded-2xl bg-slate-50 p-4">
+                  <p class="font-bold text-gray-500">시도</p>
+                  <p id="selectedSido" class="mt-1 text-lg font-black text-slate-900">-</p>
+                </div>
+                <div class="rounded-2xl bg-amber-50 p-4">
+                  <p class="font-bold text-amber-600">설립유형</p>
+                  <p id="selectedEstablishment" class="mt-1 text-lg font-black text-slate-900">-</p>
+                </div>
+              </div>
+              <p id="selectedMeta" class="mt-5 rounded-2xl border border-gray-100 px-4 py-3 text-sm leading-6 text-gray-500">-</p>
+            </article>
+
+            <div id="statGrid" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"></div>
+          </div>
+
+          <div class="grid gap-6 xl:grid-cols-[1.4fr_1fr] 2xl:grid-cols-[1.65fr_0.9fr]">
+            <article class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+              <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p class="text-sm font-black text-amber-500">4 KEY INDICATORS</p>
+                  <h3 class="mt-1 text-2xl font-black tracking-tight text-slate-900">내 학교 vs 유사 그룹 평균</h3>
+                </div>
+                <span class="rounded-2xl bg-slate-50 px-4 py-2 text-sm font-bold text-gray-500">
+                  단위: 학생 1인당 예산
+                </span>
+              </div>
+              <div class="chart-wrap mt-6">
+                <canvas id="metricChart" aria-label="4대 교육 재정 지표 비교 차트" role="img"></canvas>
+              </div>
+              <p id="chartNotice" class="mt-4 hidden rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-600"></p>
+            </article>
+
+            <article class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+              <div>
+                <p class="text-sm font-black text-amber-500">PINSET GAP TABLE</p>
+                <h3 class="mt-1 text-2xl font-black tracking-tight text-slate-900">지표별 격차</h3>
+              </div>
+              <div id="metricCards" class="mt-6 space-y-3"></div>
+            </article>
+          </div>
+
+          <div class="grid gap-6 xl:grid-cols-[1fr_1.1fr] 2xl:grid-cols-[0.95fr_1.05fr]">
+            <article class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+              <div class="flex items-end justify-between gap-4">
+                <div>
+                  <p class="text-sm font-black text-amber-500">GROUP MATCHING</p>
+                  <h3 class="mt-1 text-2xl font-black tracking-tight text-slate-900">유사 학교 그룹</h3>
+                </div>
+                <span id="groupCountBadge" class="rounded-2xl bg-amber-100 px-4 py-2 text-sm font-black text-amber-700">-</span>
+              </div>
+              <div class="mt-6 overflow-hidden rounded-2xl border border-gray-100">
+                <table class="w-full text-left text-sm">
+                  <thead class="bg-slate-50 text-xs font-black uppercase text-gray-500">
+                    <tr>
+                      <th class="px-4 py-3">학교명</th>
+                      <th class="px-4 py-3">시도</th>
+                      <th class="px-4 py-3 text-right">1인당 총예산</th>
+                    </tr>
+                  </thead>
+                  <tbody id="groupTable" class="divide-y divide-gray-100 bg-white"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="rounded-3xl border border-amber-100 bg-white p-6 shadow-sm">
+              <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p class="text-sm font-black text-amber-500">PICKSET REPORT</p>
+                  <h3 class="mt-1 text-2xl font-black tracking-tight text-slate-900">핀셋형 재정 분석 리포트</h3>
+                </div>
+                <span id="riskLabel" class="w-fit rounded-2xl bg-amber-400 px-4 py-2 text-sm font-black text-slate-900">-</span>
+              </div>
+              <div id="reportPanel" class="mt-6 rounded-3xl bg-slate-50 p-6"></div>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const METRICS = [
+        {
+          key: "per_student_welfare",
+          label: "1인당 학생복지비",
+          shortLabel: "학생복지",
+          aliases: ["per_student_welfare", "student_welfare", "welfare", "학생복지비", "1인당 학생복지비"],
+          diagnosis: "학생복지 안전망 보강",
+          guidance:
+            "유사한 학교 집단에 비해 학생복지 예산 투입이 낮습니다. 취약계층 지원, 상담, 급식·돌봄 연계처럼 체감도가 높은 복지 항목을 우선 점검하고, 반복 지출 중 효과가 낮은 항목을 복지 안전망으로 재배정하는 조정을 권고합니다.",
+        },
+        {
+          key: "per_student_basic_edu",
+          label: "기본교육활동비",
+          shortLabel: "기본교육",
+          aliases: ["per_student_basic_edu", "basic_edu", "basic_education", "기본교육활동비", "정규교육활동비"],
+          diagnosis: "기초 학력 예산 확충",
+          guidance:
+            "현재 학교 환경과 규모가 매우 유사한 타 학교 집단에 비해 정규 수업 및 기초 학력 예산 투입 비중이 낮습니다. 관성적으로 유지되는 낮은 우선순위 지출을 줄이고 기본교육활동 예산을 확충하는 핀셋형 조정을 권고합니다.",
+        },
+        {
+          key: "per_student_selective_edu",
+          label: "선택적교육활동비",
+          shortLabel: "선택교육",
+          aliases: ["per_student_selective_edu", "selective_edu", "selective_education", "선택적교육활동비", "방과후활동비"],
+          diagnosis: "맞춤형 활동 기회 확대",
+          guidance:
+            "유사 그룹 평균 대비 선택적교육활동비가 부족합니다. 방과후, 진로, 문화예술, 심화·탐구 활동처럼 학생 선택권을 넓히는 프로그램을 중심으로 예산을 재배치해 교육 경험의 폭을 보완할 필요가 있습니다.",
+        },
+        {
+          key: "per_student_support",
+          label: "교육활동지원비",
+          shortLabel: "활동지원",
+          aliases: ["per_student_support", "support", "education_support", "교육활동지원비", "교육활동 지원비"],
+          diagnosis: "수업 지원 체계 정비",
+          guidance:
+            "교육활동지원비가 유사 학교 평균보다 낮게 나타납니다. 교구, 기자재, 학습환경 개선, 교원 수업 지원처럼 실제 수업 실행력을 높이는 기반성 지출을 우선순위에 두고 운영비 구조를 재점검하는 전략이 적절합니다.",
+        },
+      ];
+
+      const DATA_URL = "./schools_grouped_v2.json";
+      let schools = [];
+      let activeSuggestionIndex = -1;
+      let latestSuggestions = [];
+      let metricChart = null;
+
+      const els = {
+        searchShell: document.querySelector("#searchShell"),
+        searchInput: document.querySelector("#schoolSearch"),
+        clearButton: document.querySelector("#clearButton"),
+        suggestions: document.querySelector("#suggestions"),
+        loadState: document.querySelector("#loadState"),
+        dashboard: document.querySelector("#dashboard"),
+        selectedSchoolName: document.querySelector("#selectedSchoolName"),
+        selectedGroupBadge: document.querySelector("#selectedGroupBadge"),
+        selectedSido: document.querySelector("#selectedSido"),
+        selectedEstablishment: document.querySelector("#selectedEstablishment"),
+        selectedMeta: document.querySelector("#selectedMeta"),
+        statGrid: document.querySelector("#statGrid"),
+        metricCards: document.querySelector("#metricCards"),
+        metricChart: document.querySelector("#metricChart"),
+        chartNotice: document.querySelector("#chartNotice"),
+        groupCountBadge: document.querySelector("#groupCountBadge"),
+        groupTable: document.querySelector("#groupTable"),
+        riskLabel: document.querySelector("#riskLabel"),
+        reportPanel: document.querySelector("#reportPanel"),
+      };
+
+      document.addEventListener("DOMContentLoaded", init);
+
+      async function init() {
+        wireEvents();
+
+        try {
+          const response = await fetch(DATA_URL, { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const rawData = await response.json();
+          schools = flattenSchools(rawData).map(normalizeSchool).filter((school) => school.name && school.groupId);
+
+          if (!schools.length) {
+            throw new Error("No school records found");
+          }
+
+          schools.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+          const groupCount = new Set(schools.map((school) => school.groupId)).size;
+          els.searchInput.disabled = false;
+          els.searchInput.placeholder = `${schools[0].name}처럼 학교명을 입력하세요`;
+          els.loadState.textContent = `${schools.length.toLocaleString("ko-KR")}개 학교 · ${groupCount.toLocaleString("ko-KR")}개 유사 그룹 연결 완료`;
+        } catch (error) {
+          els.searchInput.disabled = true;
+          if (window.location.protocol === "file:") {
+            els.loadState.innerHTML = `
+              <span class="block text-amber-600">파일로 직접 열면 브라우저가 데이터 읽기를 막습니다.</span>
+              <span class="mt-1 block text-gray-500">VS Code Live Server, 또는 터미널에서 <code class="bg-gray-100 px-1 rounded">npx serve .</code> 실행 후 localhost 주소로 열어주세요.</span>
+            `;
+          } else {
+            els.loadState.innerHTML = `
+              <span class="block text-red-600">schools_grouped_v2.json 파일을 같은 폴더에 두어야 합니다.</span>
+              <span class="mt-1 block text-gray-500">오류: ${error.message}</span>
+            `;
+          }
+          console.error("PICKSET data load failed:", error);
+        }
+      }
+
+      function wireEvents() {
+        els.searchInput.addEventListener("input", handleSearchInput);
+        els.searchInput.addEventListener("keydown", handleSearchKeys);
+        els.clearButton.addEventListener("click", resetSearch);
+        document.addEventListener("click", (event) => {
+          if (!event.target.closest("#suggestions") && !event.target.closest("#schoolSearch")) {
+            hideSuggestions();
+          }
+        });
+      }
+
+      function flattenSchools(node, bucket = []) {
+        if (Array.isArray(node)) {
+          node.forEach((item) => flattenSchools(item, bucket));
+          return bucket;
+        }
+
+        if (!node || typeof node !== "object") {
+          return bucket;
+        }
+
+        if (looksLikeSchool(node)) {
+          bucket.push(node);
+          return bucket;
+        }
+
+        Object.values(node).forEach((value) => flattenSchools(value, bucket));
+        return bucket;
+      }
+
+      function looksLikeSchool(item) {
+        const keys = Object.keys(item);
+        const hasName = keys.some((key) => ["school_name", "schoolName", "name", "학교명", "SCHUL_NM"].includes(key));
+        const hasGroup = keys.some((key) => ["group_id", "groupId", "group", "그룹ID", "그룹", "budget_tier"].includes(key));
+        const hasMetric = METRICS.some((metric) => metric.aliases.some((alias) => Object.prototype.hasOwnProperty.call(item, alias)));
+        return hasName && (hasGroup || hasMetric);
+      }
+
+      function normalizeSchool(raw) {
+        const metrics = Object.fromEntries(
+          METRICS.map((metric) => [metric.key, toNumber(getValue(raw, metric.aliases))])
+        );
+
+        const schoolType = String(getValue(raw, ["school_type", "schoolType", "학교급", "학교유형"]) || "").trim();
+        
+        // 🛠️ 버그 수정 1: 설립유형(공립/사립)이 학교유형으로 강제 오버라이트되던 오류 수정
+        const rawEst = String(getValue(raw, ["foundation_type", "establishment_type", "establishment", "found_type", "설립유형", "FOND_SC_NM"]) || "").trim();
+        const establishment = rawEst.includes("사립") ? "사립" : "공립";
+
+        // 데이터 내부의 원본 그룹 정보 추출
+        const rawGroup = String(getValue(raw, ["group_id", "groupId", "group", "그룹ID", "그룹", "budget_tier"]) || "").trim();
+
+        // budget_tier 형식 단축: "Group 1 (상위 1그룹)" → "G1"
+        const tierMatch = rawGroup.match(/Group\s*(\d+)/i);
+        const tierShort = tierMatch ? `G${tierMatch[1]}` : rawGroup;
+        
+        // 🛠️ 버그 수정 2: 'Group 1' 문자열 중복으로 타 학교급/설립유형 데이터가 섞이는 문제 해결
+        // 학교급 + 설립유형 + 티어번호를 정밀 조립하여 유니크한 고유 ID 부여 (예: H-공립-G1)
+        const uniqueGroupId = [schoolType, establishment, tierShort].filter(Boolean).join("-");
+
+        // 대시보드 배지에 깔끔하게 표기될 텍스트 포맷팅
+        const budgetTier = tierShort ? `Group ${tierShort.replace(/G/i, '')}` : "미지정";
+
+        return {
+          raw,
+          name: String(getValue(raw, ["school_name", "schoolName", "name", "학교명", "SCHUL_NM"]) || "").trim(),
+          sido: String(getValue(raw, ["sido", "시도", "region", "지역", "ATPT_OFCDC_SC_NM"]) || "미상").trim(),
+          establishment,
+          schoolType,
+          groupId: uniqueGroupId, // 유니크 식별자 적용 완료
+          studentCount: toNumber(getValue(raw, ["student_count", "students", "studentCount", "학생수", "총학생수"])),
+          perStudentBudget: toNumber(getValue(raw, ["per_student_budget", "perStudentBudget", "1인당총예산", "1인당 총예산"])),
+          budgetScore: toNumber(getValue(raw, ["budget_score", "per_budget_score", "예산점수", "1인당예산점수"])),
+          studentScore: toNumber(getValue(raw, ["student_score", "students_score", "학생수점수"])),
+          weightedScore: toNumber(getValue(raw, ["calculated_score", "weighted_score", "score", "가중치점수", "총점"])),
+          budgetTier,
+          metrics,
+        };
+      }
+
+      function getValue(object, aliases) {
+        for (const alias of aliases) {
+          if (Object.prototype.hasOwnProperty.call(object, alias) && object[alias] !== null && object[alias] !== "") {
+            return object[alias];
+          }
+        }
+
+        const lowerKeyMap = Object.fromEntries(Object.keys(object).map((key) => [key.toLowerCase(), key]));
+        for (const alias of aliases) {
+          const realKey = lowerKeyMap[String(alias).toLowerCase()];
+          if (realKey && object[realKey] !== null && object[realKey] !== "") {
+            return object[realKey];
+          }
+        }
+
+        return undefined;
+      }
+
+      function toNumber(value) {
+        if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+        if (typeof value !== "string") return 0;
+        const normalized = value.replace(/[^0-9.-]/g, "");
+        const parsed = Number(normalized);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+
+      function handleSearchInput() {
+        const query = els.searchInput.value.trim();
+        els.clearButton.classList.toggle("hidden", !query);
+        activeSuggestionIndex = -1;
+
+        if (!query) {
+          hideSuggestions();
+          return;
+        }
+
+        latestSuggestions = schools
+          .filter((school) => {
+            const haystack = `${school.name} ${school.sido} ${school.establishment} ${school.groupId}`.toLowerCase();
+            return haystack.includes(query.toLowerCase());
+          })
+          .slice(0, 8);
+
+        renderSuggestions(query);
+      }
+
+      function handleSearchKeys(event) {
+        if (els.suggestions.classList.contains("hidden")) return;
+
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          activeSuggestionIndex = Math.min(activeSuggestionIndex + 1, latestSuggestions.length - 1);
+          renderSuggestions(els.searchInput.value.trim());
+        }
+
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          activeSuggestionIndex = Math.max(activeSuggestionIndex - 1, 0);
+          renderSuggestions(els.searchInput.value.trim());
+        }
+
+        if (event.key === "Enter") {
+          event.preventDefault();
+          const selected = latestSuggestions[activeSuggestionIndex] || latestSuggestions[0];
+          if (selected) selectSchool(selected);
+        }
+
+        if (event.key === "Escape") {
+          hideSuggestions();
+        }
+      }
+
+      function renderSuggestions(query) {
+        if (!latestSuggestions.length) {
+          els.suggestions.innerHTML = `
+            <div class="px-5 py-5 text-sm font-bold text-gray-500">
+              일치하는 학교가 없습니다.
+            </div>
+          `;
+          els.suggestions.classList.remove("hidden");
+          return;
+        }
+
+        els.suggestions.innerHTML = latestSuggestions
+          .map((school, index) => {
+            const activeClass = index === activeSuggestionIndex ? "suggestion-active" : "";
+            return `
+              <button
+                type="button"
+                class="${activeClass} flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-amber-50"
+                role="option"
+                data-index="${index}"
+                aria-selected="${index === activeSuggestionIndex}"
+              >
+                <span class="min-w-0">
+                  <span class="block truncate text-base font-black text-slate-900">${highlightMatch(escapeHtml(school.name), query)}</span>
+                  <span class="mt-1 block truncate text-sm font-semibold text-gray-500">${escapeHtml(school.sido)} · ${escapeHtml(school.establishment)}</span>
+                </span>
+                <span class="shrink-0 rounded-2xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">${escapeHtml(school.budgetTier)}</span>
+              </button>
+            `;
+          })
+          .join("");
+
+        els.suggestions.querySelectorAll("button").forEach((button) => {
+          button.addEventListener("mouseenter", () => {
+            activeSuggestionIndex = Number(button.dataset.index);
+            renderSuggestions(query);
+          });
+          button.addEventListener("pointerdown", (event) => {
+            event.preventDefault();
+            selectSchool(latestSuggestions[Number(button.dataset.index)]);
+          });
+          button.addEventListener("click", () => selectSchool(latestSuggestions[Number(button.dataset.index)]));
+        });
+
+        els.suggestions.classList.remove("hidden");
+      }
+
+      function highlightMatch(label, query) {
+        if (!query) return label;
+        const safeQuery = escapeRegExp(query);
+        return label.replace(new RegExp(`(${safeQuery})`, "ig"), '<mark class="rounded bg-amber-200 px-1 text-slate-950">$1</mark>');
+      }
+
+      function selectSchool(school) {
+        els.searchInput.value = school.name;
+        els.clearButton.classList.remove("hidden");
+        hideSuggestions();
+
+        const groupSchools = schools.filter((item) => item.groupId === school.groupId);
+        const averages = calculateAverages(groupSchools);
+        const comparisons = METRICS.map((metric) => {
+          const mine = school.metrics[metric.key];
+          const average = averages[metric.key];
+          const diff = mine - average;
+          const percent = average ? (diff / average) * 100 : 0;
+          return { ...metric, mine, average, diff, percent };
+        });
+
+        revealDashboard();
+        renderSelectedSchool(school);
+        renderStats(school, groupSchools, comparisons);
+        renderChart(comparisons);
+        renderMetricCards(comparisons);
+        renderGroupTable(groupSchools, school);
+        renderReport(school, groupSchools, comparisons);
+
+        window.setTimeout(() => {
+          els.dashboard.scrollIntoView({ block: "start", behavior: "smooth" });
+        }, 80);
+      }
+
+      function revealDashboard() {
+        els.searchShell.classList.add("compact", "py-6");
+        els.searchShell.classList.remove("py-10");
+        els.dashboard.classList.remove("hidden");
+        requestAnimationFrame(() => {
+          els.dashboard.classList.remove("opacity-0", "translate-y-8");
+          els.dashboard.classList.add("rise-in");
+        });
+      }
+
+      function calculateAverages(groupSchools) {
+        return Object.fromEntries(
+          METRICS.map((metric) => {
+            const validValues = groupSchools.map((school) => school.metrics[metric.key]).filter(Number.isFinite);
+            const average = validValues.length ? validValues.reduce((sum, value) => sum + value, 0) / validValues.length : 0;
+            return [metric.key, average];
+          })
+        );
+      }
+
+      function renderSelectedSchool(school) {
+        els.selectedSchoolName.textContent = school.name;
+        els.selectedGroupBadge.textContent = school.budgetTier;
+        els.selectedSido.textContent = school.sido;
+        els.selectedEstablishment.textContent = school.establishment;
+
+        const scoreText = school.weightedScore
+          ? `그룹 산정 점수 ${formatScore(school.weightedScore)}`
+          : "가중 점수 정보 없음";
+        const budgetText = school.perStudentBudget ? `1인당 총예산 ${formatKrw(school.perStudentBudget)}` : "1인당 총예산 정보 없음";
+        const schoolTypeText = school.schoolType ? `${formatSchoolType(school.schoolType)} · ` : "";
+        els.selectedMeta.textContent = `${schoolTypeText}${budgetText} · ${scoreText} · 4대 지표 합계 ${formatKrw(sumMetrics(school.metrics))}`;
+      }
+
+      function renderStats(school, groupSchools, comparisons) {
+        const myTotal = sumMetrics(school.metrics);
+        const avgTotal = comparisons.reduce((sum, item) => sum + item.average, 0);
+        const weakest = getWeakestMetric(comparisons);
+
+        const stats = [
+          {
+            number: "01",
+            label: "유사 그룹 규모",
+            value: `${groupSchools.length}개교`,
+            note: `${school.budgetTier}`,
+            tone: "bg-white",
+          },
+          {
+            number: "02",
+            label: "내 학교 4대 지표",
+            value: formatKrw(myTotal),
+            note: "학생 1인당 합계",
+            tone: "bg-amber-400",
+          },
+          {
+            number: "03",
+            label: "그룹 평균 4대 지표",
+            value: formatKrw(avgTotal),
+            note: "유사 학교 평균 합계",
+            tone: "bg-white",
+          },
+          {
+            number: "04",
+            label: "핀셋 조정 지표",
+            value: weakest.shortLabel,
+            note: `평균 대비 ${formatPercent(weakest.percent)}`,
+            tone: "bg-slate-900",
+          },
+        ];
+
+        els.statGrid.innerHTML = stats
+          .map((stat) => {
+            const dark = stat.tone === "bg-slate-900";
+            const amber = stat.tone === "bg-amber-400";
+            return `
+              <article class="${stat.tone} rounded-3xl border border-gray-100 p-5 shadow-sm ${dark ? "text-white" : "text-slate-900"}">
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-3xl font-black ${amber ? "text-slate-900" : dark ? "text-amber-300" : "text-amber-500"}">${stat.number}</span>
+                  <span class="h-3 w-3 rounded-full ${amber ? "bg-white" : dark ? "bg-amber-400" : "bg-amber-300"}"></span>
+                </div>
+                <p class="mt-8 text-sm font-black ${dark ? "text-slate-300" : amber ? "text-slate-800" : "text-gray-500"}">${stat.label}</p>
+                <p class="mt-2 break-words text-2xl font-black tracking-tight">${stat.value}</p>
+                <p class="mt-2 text-sm font-semibold ${dark ? "text-slate-300" : amber ? "text-slate-700" : "text-gray-500"}">${stat.note}</p>
+              </article>
+            `;
+          })
+          .join("");
+      }
+
+      function renderChart(comparisons) {
+        if (!window.Chart) {
+          els.chartNotice.textContent = "Chart.js CDN을 불러오지 못했습니다. 네트워크 연결 후 다시 열어주세요.";
+          els.chartNotice.classList.remove("hidden");
+          return;
+        }
+
+        els.chartNotice.classList.add("hidden");
+        const ctx = els.metricChart.getContext("2d");
+
+        if (metricChart) {
+          metricChart.destroy();
+        }
+
+        metricChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: comparisons.map((item) => item.shortLabel),
+            datasets: [
+              {
+                label: "내 학교",
+                data: comparisons.map((item) => item.mine),
+                backgroundColor: "rgba(251, 191, 36, 0.9)",
+                borderColor: "rgb(245, 158, 11)",
+                borderWidth: 1,
+                borderRadius: 12,
+                maxBarThickness: 54,
+              },
+              {
+                label: "유사 그룹 평균",
+                data: comparisons.map((item) => item.average),
+                backgroundColor: "rgba(71, 85, 105, 0.82)",
+                borderColor: "rgb(51, 65, 85)",
+                borderWidth: 1,
+                borderRadius: 12,
+                maxBarThickness: 54,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              mode: "index",
+              intersect: false,
+            },
+            plugins: {
+              legend: {
+                position: "top",
+                align: "end",
+                labels: {
+                  usePointStyle: true,
+                  pointStyle: "rectRounded",
+                  boxWidth: 10,
+                  color: "#334155",
+                  font: {
+                    size: 13,
+                    weight: "700",
+                  },
+                },
+              },
+              tooltip: {
+                callbacks: {
+                  label: (context) => `${context.dataset.label}: ${formatKrw(context.parsed.y)}`,
+                },
+              },
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: {
+                  color: "#64748b",
+                  font: { weight: "800" },
+                },
+              },
+              y: {
+                beginAtZero: true,
+                border: { display: false },
+                grid: {
+                  color: "rgba(148, 163, 184, 0.18)",
+                },
+                ticks: {
+                  color: "#64748b",
+                  callback: (value) => formatKrwCompact(value),
+                },
+              },
+            },
+          },
+        });
+      }
+
+      function renderMetricCards(comparisons) {
+        els.metricCards.innerHTML = comparisons
+          .map((item) => {
+            const positive = item.diff >= 0;
+            const diffColor = positive ? "text-blue-600 bg-blue-50" : "text-red-600 bg-red-50";
+            const symbol = positive ? "▲" : "▼";
+            return `
+              <div class="rounded-2xl border border-gray-100 p-4">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="text-sm font-black text-slate-900">${item.label}</p>
+                    <p class="mt-1 text-xs font-bold text-gray-500">내 학교 ${formatKrw(item.mine)} · 평균 ${formatKrw(item.average)}</p>
+                  </div>
+                  <span class="${diffColor} shrink-0 rounded-2xl px-3 py-2 text-sm font-black">
+                    ${symbol} ${formatKrw(Math.abs(item.diff))}
+                  </span>
+                </div>
+                <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div class="${positive ? "bg-blue-500" : "bg-red-500"} h-full rounded-full" style="width: ${Math.min(100, Math.max(8, Math.abs(item.percent)))}%"></div>
+                </div>
+                <p class="mt-2 text-xs font-bold ${positive ? "text-blue-600" : "text-red-600"}">${positive ? "평균 대비 +" : "평균 대비 "}${item.percent.toFixed(1)}%</p>
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      function renderGroupTable(groupSchools, selectedSchool) {
+        els.groupCountBadge.textContent = `${groupSchools.length}개교`;
+        els.groupTable.innerHTML = groupSchools
+          .slice()
+          .sort((a, b) => b.weightedScore - a.weightedScore || a.name.localeCompare(b.name, "ko"))
+          .map((school) => {
+            const selected = school.name === selectedSchool.name;
+            return `
+              <tr class="${selected ? "bg-amber-50" : ""}">
+                <td class="px-4 py-3 font-black text-slate-900">
+                  ${escapeHtml(school.name)}
+                  ${selected ? '<span class="ml-2 rounded-full bg-amber-400 px-2 py-1 text-[10px] font-black text-slate-900">PICK</span>' : ""}
+                </td>
+                <td class="px-4 py-3 font-semibold text-gray-500">${escapeHtml(school.sido)}</td>
+                <td class="px-4 py-3 text-right font-black text-slate-700">${school.perStudentBudget ? formatKrw(school.perStudentBudget) : "-"}</td>
+              </tr>
+            `;
+          })
+          .join("");
+      }
+
+      function renderReport(school, groupSchools, comparisons) {
+        const weakest = getWeakestMetric(comparisons);
+        const totalDiff = sumMetrics(school.metrics) - comparisons.reduce((sum, item) => sum + item.average, 0);
+        const overallPositive = totalDiff >= 0;
+
+        els.riskLabel.textContent = weakest.diagnosis;
+        const reportLead =
+          weakest.percent < 0
+            ? `${escapeHtml(weakest.label)}에서 평균 대비 비율이 가장 낮게 나타났습니다.`
+            : `4대 지표가 모두 평균 이상이지만, ${escapeHtml(weakest.label)}의 평균 대비 비율이 상대적으로 가장 낮습니다.`;
+        const reportGuidance =
+          weakest.percent < 0
+            ? weakest.guidance
+            : `${weakest.guidance} 현재 총 4대 지표 격차는 ${overallPositive ? "평균보다 높지만" : "평균보다 낮으므로"}, 다음 예산 조정에서는 이 항목의 유지 수준과 사업 효과를 우선 점검하는 것이 좋습니다.`;
+        els.reportPanel.innerHTML = `
+          <p class="text-xl font-black leading-8 text-slate-900">${reportLead}</p>
+          <p class="mt-4 leading-7 text-gray-600">
+            ${reportGuidance}
+          </p>
+          <div class="mt-6 grid gap-3 sm:grid-cols-3">
+            <div class="rounded-2xl bg-white p-4">
+              <p class="text-xs font-black text-gray-500">내 학교</p>
+              <p class="mt-1 text-lg font-black text-slate-900">${formatKrw(weakest.mine)}</p>
+            </div>
+            <div class="rounded-2xl bg-white p-4">
+              <p class="text-xs font-black text-gray-500">그룹 평균</p>
+              <p class="mt-1 text-lg font-black text-slate-900">${formatKrw(weakest.average)}</p>
+            </div>
+            <div class="rounded-2xl bg-white p-4">
+              <p class="text-xs font-black ${weakest.diff < 0 ? "text-red-500" : "text-blue-500"}">평균 대비</p>
+              <p class="mt-1 text-lg font-black ${weakest.diff < 0 ? "text-red-600" : "text-blue-600"}">${weakest.diff < 0 ? "▼" : "▲"} ${formatKrw(Math.abs(weakest.diff))}</p>
+              <p class="mt-1 text-xs font-black ${weakest.diff < 0 ? "text-red-500" : "text-blue-500"}">${formatPercent(weakest.percent)}</p>
+            </div>
+          </div>
+        `;
+      }
+
+      function getWeakestMetric(comparisons) {
+        return comparisons.slice().sort((a, b) => a.percent - b.percent)[0];
+      }
+
+      function resetSearch() {
+        els.searchInput.value = "";
+        els.clearButton.classList.add("hidden");
+        hideSuggestions();
+        els.searchInput.focus();
+      }
+
+      function hideSuggestions() {
+        els.suggestions.classList.add("hidden");
+        els.suggestions.innerHTML = "";
+      }
+
+      function sumMetrics(metrics) {
+        return METRICS.reduce((sum, metric) => sum + (metrics[metric.key] || 0), 0);
+      }
+
+      function formatKrw(value) {
+        const number = Math.round(value || 0);
+        if (number >= 100000000) return `${(number / 100000000).toFixed(1)}억원`;
+        if (number >= 10000) return `${formatNumber(Math.round(number / 10000))}만원`;
+        return `${formatNumber(number)}원`;
+      }
+
+      function formatKrwCompact(value) {
+        const number = Math.round(value || 0);
+        if (number >= 100000000) return `${(number / 100000000).toFixed(1)}억`;
+        if (number >= 10000) return `${Math.round(number / 10000)}만`;
+        return formatNumber(number);
+      }
+
+      function formatNumber(value) {
+        return Math.round(value || 0).toLocaleString("ko-KR");
+      }
+
+      function formatScore(value) {
+        return Number(value || 0).toLocaleString("ko-KR", {
+          maximumFractionDigits: 4,
+        });
+      }
+
+      function formatPercent(value) {
+        return `${value >= 0 ? "+" : ""}${Number(value || 0).toFixed(1)}%`;
+      }
+
+      function formatSchoolType(value) {
+        const typeMap = {
+          E: "초등학교",
+          M: "중학교",
+          H: "고등학교",
+          S: "특수학교",
+        };
+        return typeMap[value] || value;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function escapeRegExp(value) {
+        return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+    </script>
+  </body>
+</html>
